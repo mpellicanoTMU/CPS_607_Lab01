@@ -1,0 +1,66 @@
+// Define PINs to control motors
+const int A_pinF = 6;
+const int A_pinR = 5;
+const int B_pinF = 9;
+const int B_pinR = 10;
+
+void setup() {
+  // Define PINs as outputs
+  pinMode(A_pinF, OUTPUT);
+  pinMode(A_pinR, OUTPUT);
+  pinMode(B_pinF, OUTPUT);
+  pinMode(B_pinR, OUTPUT);
+
+  // Start serial monitor
+  Serial.begin(9600);
+}
+
+void loop() {
+
+  int speed = 150;
+
+  for (int i= 0; i < 4; i++) {
+    // Straight 1m
+    straight(speed);
+    delay(4000);
+
+    stopMove();
+    delay(250);
+
+    turn90Right(speed);
+    delay(450);
+
+    stopMove();
+    delay(250);
+  }
+
+  delay(1000);
+
+}
+
+void straight(int speed) {
+
+    analogWrite(A_pinF, speed);
+    analogWrite(B_pinF, speed - 12.5);
+    analogWrite(A_pinR, 0);
+    analogWrite(B_pinR, 0);
+
+}
+
+void turn90Right(int speed) {
+
+    analogWrite(A_pinF, 0);
+    analogWrite(B_pinF, speed - 5);
+    analogWrite(A_pinR, speed);
+    analogWrite(B_pinR, 0);
+
+}
+
+void stopMove() {
+
+    analogWrite(A_pinF, 0);
+    analogWrite(B_pinF, 0);
+    analogWrite(A_pinR, 0);
+    analogWrite(B_pinR, 0);
+
+}
