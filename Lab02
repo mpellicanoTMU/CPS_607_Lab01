@@ -1,0 +1,173 @@
+// Pins for Motors
+const int A_pinF = 6;
+const int A_pinR = 5;
+const int B_pinF = 9;
+const int B_pinR = 10;
+
+//Pins for IR sensors
+const int irPinR = 7; // Right IR sensor
+const int irPinL = 8; // Left IR sensor
+
+// Pins for Ultrasonic
+const int frontTrigPin = 13;
+const int frontEchoPin = 12;
+
+//Pin for line sensor
+const int linePin = 2;
+
+// Timing for sensors
+unsigned long currentMillis = 0;
+unsigned long previousMillis = 0; // Stores the last time the sensor was read
+const long interval = 60; // Defines the interval in which we want to trigger the sensor (60ms)
+
+//Filtering for distance
+const int front_window_size = 5; // Number of last measurement to use is moving average filter
+float front_window[front_window_size]; // Array that stores the last ten measurements
+int front_window_index = 0; // Keeps track of where the oldest data is in the array (will be replaced with the newest data)
+
+// Distance thresholds
+float distance_threshold = 0.05; // Trigger behaviour change when 5 cm within obstacle 
+
+// Variables for detecting hand
+const int ir_window_size = 5; // Number of last readings kept for each IR sensor
+int ir_window_R[ir_window_size]; // Last five readings, right sensor
+int ir_window_L[ir_window_size]; // Last five readings, left sensor
+int ir_window_index = 0; // Shared index, both sensors are read at the same time
+int ir_sum_R = 0; // 0 to 5, detections in the last five readings (right)
+int ir_sum_L = 0; // 0 to 5, detections in the last five readings (left)
+
+// Timing for states
+unsigned long previousMillisStateChange = 0;
+const long state_change_interval = 100; // state can change max once per second
+
+// Initialize distance with 100 m (to avoid instant state transition triggering)
+float front_filtered_distance = 100;
+float front_raw_distance = 100;
+
+void setup() {
+  // put your setup code here, to run once:
+  Serial.begin(9600);
+
+  // Define Motor PINs as outputs
+  pinMode(A_pinF, OUTPUT);
+  pinMode(A_pinR, OUTPUT);
+  pinMode(B_pinF, OUTPUT);
+  pinMode(B_pinR, OUTPUT);
+
+  // Ultrasonic pin mode defition
+  pinMode(frontEchoPin, INPUT);
+  pinMode(frontTrigPin, OUTPUT);
+
+  // IR pin mode definition
+  pinMode(irPinR, INPUT);
+  pinMode(irPinL, INPUT);
+
+  // Line pin mode definition
+  pinMode(linePin, INPUT);
+
+  // Init distances to large values to avoid instant state triggering
+  for(unsigned int i = 0; i < front_window_size; i++)
+  {
+    front_window[i] = 100;
+  }
+
+  // Init IR windows
+  for(unsigned int i = 0; i < ir_window_size; i++)
+  {
+    ir_window_R[i] = 0;
+    ir_window_L[i] = 0;
+  }
+
+  // wait 5 seconds before starting for safety
+  delay(5000);
+
+}
+
+void loop() {
+  // put your main code here, to run repeatedly:
+
+  int speed = 125;
+
+  // Grab the current time
+  currentMillis = millis();
+
+  // SENSING AND DATA PROCESSING
+  if(currentMillis - previousMillis >= interval) {
+    previousMillis = currentMillis; // Save the last time we pinged (which is now)
+
+    // FRONT DISTANCE
+    front_raw_distance = readFrontSensorData();
+
+    // Overwrite the oldest data in our array
+    front_window[front_window_index] = front_raw_distance;
+    
+    // Advance index
+    front_window_index = (front_window_index + 1)%front_window_size; // 0 --> 1 --> ... --> 9 --> 0
+
+    // Calculate the average of the whole window
+    float sum = 0;
+    for(int i = 0; i < front_window_size; i++)
+    {
+      sum += front_window[i];
+    }
+    front_filtered_distance = sum / front_window_size;
+
+    // IR SENSORS
+    // The ! assumes the modules output LOW when they detect something
+    ir_window_R[ir_window_index] = !digitalRead(irPinR);
+    ir_window_L[ir_window_index] = !digitalRead(irPinL);
+
+    // Advance index
+    ir_window_index = (ir_window_index + 1)%ir_window_size;
+
+    // Sum up the detections over the window
+    ir_sum_R = 0;
+    ir_sum_L = 0;
+    for(int i = 0; i < ir_window_size; i++)
+    {
+      ir_sum_R += ir_window_R[i];
+      ir_sum_L += ir_window_L[i];
+    }
+
+    // LINE SENSOR
+    int line_detected = digitalRead(linePin);
+
+    // PRINT FOR DEBUGGING
+    Serial.print("dist_front:");
+    Serial.print(front_filtered_distance * 100);
+    Serial.print(",");
+    Serial.print("ir_right:");
+    Serial.print(ir_sum_R);
+    Serial.print(",");
+    Serial.print("ir_left:");
+    Serial.print(ir_sum_L);
+    Serial.print(",");
+    Serial.print("detect_line:");
+    Serial.println(line_detected);
+
+  }
+
+}
+
+float readFrontSensorData() {
+  // Sets Trigger Pin to HIGH for 10 us
+  digitalWrite(frontTrigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(frontTrigPin, LOW);
+
+  // Wait for return signal echo pin
+  float time = pulseIn(frontEchoPin, HIGH, 30000) * 1e-6;
+  float distance = time * 343 * 0.5;
+
+  return distance;
+}
+
+void stepTurn() {
+
+  analogWrite(A_pinF, 0);
+  analogWrite(B_pinF, speed);
+  analogWrite(A_pinR, speed);
+  analogWrite(B_pinR, 0);
+
+}
+
